@@ -25,5 +25,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
 	UInputAction* InputSprint;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	UInputAction* InputJumpAttack;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	UInputAction* InputDefaultAttack;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	UInputAction* InputJump;
 };

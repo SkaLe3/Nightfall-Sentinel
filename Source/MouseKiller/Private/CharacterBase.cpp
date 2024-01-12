@@ -9,6 +9,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Animation/AnimMontage.h"
 
 // Sets default values
 ACharacterBase::ACharacterBase()
@@ -37,6 +38,18 @@ void ACharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (bWantsWalk)
+	{
+		float CurrentSpeed =  GetComponentByClass<UCharacterMovementComponent>()->MaxWalkSpeed;
+		CurrentSpeed = FMath::FInterpTo(CurrentSpeed, MaxWalkingSpeed, DeltaTime, RunToWalkTransitionSpeed);
+		GetComponentByClass<UCharacterMovementComponent>()->MaxWalkSpeed = CurrentSpeed;
+		if (CurrentSpeed - MaxWalkingSpeed <= 40.f)
+		{
+			bWantsWalk = false;
+			GetComponentByClass<UCharacterMovementComponent>()->MaxWalkSpeed = MaxWalkingSpeed;
+		}
+	}
+
 }
 
 // Called to bind functionality to input
@@ -57,6 +70,9 @@ void ACharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 	PEI->BindAction(InputActions->InputLook, ETriggerEvent::Triggered, this, &ACharacterBase::Look);
 	PEI->BindAction(InputActions->InputSprint, ETriggerEvent::Started, this, &ACharacterBase::StartSprint);
 	PEI->BindAction(InputActions->InputSprint, ETriggerEvent::Completed, this, &ACharacterBase::StopSprint);
+	PEI->BindAction(InputActions->InputJumpAttack, ETriggerEvent::Started, this, &ACharacterBase::JumpBite);
+	PEI->BindAction(InputActions->InputDefaultAttack, ETriggerEvent::Started, this, &ACharacterBase::Bite);
+	PEI->BindAction(InputActions->InputJump, ETriggerEvent::Started, this, &ACharacterBase::Jump);
 }
 
 void ACharacterBase::Move(const FInputActionValue& Value)
@@ -64,17 +80,22 @@ void ACharacterBase::Move(const FInputActionValue& Value)
 	if (Controller != nullptr)
 	{
 		const FVector2D MoveValue = Value.Get<FVector2D>();
-		const FRotator MovementRotation(0, Controller->GetControlRotation().Yaw, 0);
+
+		MovementRotationTarget.Yaw = FMath::RInterpTo(MovementRotationTarget, Controller->GetControlRotation(), GetWorld()->GetDeltaSeconds(), 1.6).Yaw;
+
+		float multiplier = 1.01;
+		if (MoveValue.X != 0.f && MoveValue.Y != 0.f)
+			multiplier = 1.5;
 
 		// Forward/Backward direction
 		if (MoveValue.Y != 0.f)
 		{
 			// Get forward vector
-			FVector Direction = MovementRotation.RotateVector(FVector::ForwardVector);
+			FVector Direction = MovementRotationTarget.RotateVector(FVector::ForwardVector);
 			FRotator Rotation(0, GetActorRotation().Yaw, 0);
 			FVector ActorDirection = Rotation.RotateVector(FVector::ForwardVector);
 
-			Direction = MoveValue.Y * Direction + ActorDirection * 1.01;
+			Direction = Direction * MoveValue.Y + ActorDirection * multiplier;
 			Direction.Normalize();
 			AddMovementInput(Direction, FMath::Abs(MoveValue.Y));
 		}
@@ -83,30 +104,14 @@ void ACharacterBase::Move(const FInputActionValue& Value)
 		if (MoveValue.X != 0.f)
 		{
 			// Get right vector
-			FVector Direction = MovementRotation.RotateVector(FVector::RightVector);
+			FVector Direction = MovementRotationTarget.RotateVector(FVector::RightVector);
 			FRotator Rotation(0, GetActorRotation().Yaw, 0);
 			FVector ActorDirection = Rotation.RotateVector(FVector::ForwardVector);
 
-			Direction = MoveValue.X * Direction + ActorDirection * 1.01;
+			Direction = Direction * MoveValue.X + ActorDirection * multiplier;
 			Direction.Normalize();
-			AddMovementInput(Direction, FMath::Abs(MoveValue.X));
-		}
-
-// 		if (MoveValue.X != 0.f || MoveValue.Y != 0.f)
-// 		{
-// 
-// 			FVector DirectionForward = MovementRotation.RotateVector(FVector::ForwardVector);
-// 			FVector DirectionRight = MovementRotation.RotateVector(FVector::RightVector);
-// 			FVector Direction = DirectionForward * MoveValue.Y + DirectionRight * MoveValue.X;
-// 			Direction.Normalize();
-// 			FRotator ActorRotation(0, GetActorRotation().Yaw, 0);
-// 			FVector ActorDirection = ActorRotation.RotateVector(FVector::ForwardVector);
-// 
-// 			Direction = MoveValue.X * Direction + ActorDirection * 1.01;
-// 			Direction.Normalize();
-// 			AddMovementInput(Direction, FMath::Abs(MoveValue.X) + FMath::Abs(MoveValue.Y));
-// 		}
-
+			AddMovementInput(Direction, FMath::Abs(MoveValue.X));	
+		}	
 	}
 }
 
@@ -128,13 +133,78 @@ void ACharacterBase::Look(const FInputActionValue& Value)
 	}
 }
 
+void ACharacterBase::Jump(const FInputActionValue& Value)
+{
+	if (GetVelocity().Length() >= 10)
+	{
+		ACharacter::Jump();
+	}
+}
+
+void ACharacterBase::JumpBite(const FInputActionValue& Value)
+{
+	if (bCanAttack)
+	{
+		bCanAttack = false;
+		GetWorldTimerManager().SetTimer(AttackTimer, this, &ACharacterBase::AllowAttack, JumpAttackCooldown, false);
+
+		FName AnimName;
+		AnimName = GetVelocity().Length() > 200 ? FName(TEXT("Default")) : FName(TEXT("SlowJump"));
+
+		PlayAnimMontage(JumpBiteAnimation, 1.f, AnimName);
+	}
+	else if (float RemainingTime = GetWorldTimerManager().GetTimerRemaining(AttackTimer); RemainingTime < 0.3)
+	{
+		FTimerHandle PlannedAttack;
+		GetWorldTimerManager().SetTimer(PlannedAttack, this, &ACharacterBase::PlannedJumpBite, RemainingTime, false);
+	}
+}
+
+void ACharacterBase::Bite(const FInputActionValue& Value)
+{
+	if (bCanAttack)
+	{
+		bCanAttack = false;
+		GetWorldTimerManager().SetTimer(AttackTimer, this, &ACharacterBase::AllowAttack, DeafaultAttackCooldown, false);
+
+		FName AnimName;
+		AnimName = GetVelocity().Length() > 10 ? FName(TEXT("Run")) : FName(TEXT("Default"));
+
+		PlayAnimMontage(BiteAnimation, 1.0f, AnimName);
+	}
+	else if (float RemainingTime = GetWorldTimerManager().GetTimerRemaining(AttackTimer); RemainingTime < 0.3)
+	{
+		FTimerHandle PlannedAttack;
+		GetWorldTimerManager().SetTimer(PlannedAttack, this, &ACharacterBase::PlannedBite, RemainingTime, false);
+	}
+
+}
+
+void ACharacterBase::PlannedJumpBite()
+{
+	bCanAttack = true;
+	JumpBite(1);
+}
+
+void ACharacterBase::PlannedBite()
+{
+	bCanAttack = true;
+	Bite(1);
+}
+
 void ACharacterBase::StartSprint()
 {
 	GetComponentByClass<UCharacterMovementComponent>()->MaxWalkSpeed = MaxRunningSpeed;
+	bWantsWalk = false;
 }
 
 void ACharacterBase::StopSprint()
 {
-	GetComponentByClass<UCharacterMovementComponent>()->MaxWalkSpeed = MaxWalkingSpeed;
+	bWantsWalk = true;
+}
+
+void ACharacterBase::AllowAttack()
+{
+	bCanAttack = true;
 }
 

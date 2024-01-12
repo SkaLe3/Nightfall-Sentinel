@@ -29,34 +29,65 @@ public:
 protected:
 
 	void Move(const FInputActionValue& Value);
-
 	void Look(const FInputActionValue& Value);
+	void Jump(const FInputActionValue& Value);
+	void JumpBite(const FInputActionValue& Value);
+	void Bite(const FInputActionValue& Value);
+
+	void PlannedJumpBite();
+	void PlannedBite();
 
 	void StartSprint();
 	void StopSprint();
+
+private:
+
 
 protected:
 	/* INPUT */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	class UInputMappingContext* InputMapping;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Input")
 	class UMKInputConfigData* InputActions;
 
-protected:
+
 	/* COMPONENTS */
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
 	class USpringArmComponent* SpringArmComponent;
-
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
 	class UCameraComponent* CameraComponent;
 
-protected:
+
+	/* Assets */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animations")
+	class UAnimMontage* JumpBiteAnimation;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animations")
+	class UAnimMontage* BiteAnimation;
+
+
 	/* Parameters*/
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float MaxWalkingSpeed = 80;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float MaxRunningSpeed = 650;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
+	float RunToWalkTransitionSpeed = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float DeafaultAttackCooldown = 0.6;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float JumpAttackCooldown = 1;
+
+	FTimerHandle AttackTimer;
+
+	FRotator MovementRotationTarget = { 0, 0, 0 };
+
+private:
+	bool bWantsWalk = false;
+	bool bCanAttack = true;
+
+	void AllowAttack();
 };
