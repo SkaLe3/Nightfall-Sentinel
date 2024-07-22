@@ -29,10 +29,12 @@ public:
 protected:
 
 	void Move(const FInputActionValue& Value);
+	void StopMove(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 	void Jump(const FInputActionValue& Value);
 	void JumpBite(const FInputActionValue& Value);
 	void Bite(const FInputActionValue& Value);
+	void PerformBiteTrace(float SphereRadius, float Damage);
 
 	void PlannedJumpBite();
 	void PlannedBite();
@@ -40,8 +42,17 @@ protected:
 	void StartSprint();
 	void StopSprint();
 
+	void StopInitiated();
+	void StopCompleted();
+
+	float SlowdownFunction(float time);
+
+	UFUNCTION()
+	void OnHealthChanged(UMKHealthComponent* OwningHealthComponent, float Health, float HealthDelta, const class UDamageType* DamageType, class AController* InstigatedBy, AActor* DamageCauser);
+
 private:
 
+	FVector GetSurfaceNormal();
 
 protected:
 	/* INPUT */
@@ -57,6 +68,8 @@ protected:
 	class USpringArmComponent* SpringArmComponent;
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
 	class UCameraComponent* CameraComponent;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Components")
+	class UMKHealthComponent* HealthComponent;
 
 
 	/* Assets */
@@ -65,6 +78,8 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animations")
 	class UAnimMontage* BiteAnimation;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Sound")
+	class USoundBase* HitMarkerSoundCue;
 
 	/* Parameters*/
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
@@ -72,20 +87,52 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
 	float MaxRunningSpeed = 650;
 
+	float CurrentMaxSpeed;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
-	float RunToWalkTransitionSpeed = 2;
+	float DefaultSlowdownTransitionTime = 4;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
+	float UrgentSlowdownTransitionTime = 0.3f;
+
+	float SlowdownTransitionTime = 4;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Movement")
+	float SidewaysDragInterpolationSpeed = 1;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Movement")
+	float Acceleration = 400;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
-	float DeafaultAttackCooldown = 0.6;
+	float DeafaultAttackCooldown = 0.6f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float DefaultAttackRadius = 20.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float DefaultAttackDamage = 30.f;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
 	float JumpAttackCooldown = 1;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float JumpAttackRadius = 35.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float JumpAttackDamage = 50.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Combat")
+	float JumpAttackTraceDelay = 0.4f;
+
 	FTimerHandle AttackTimer;
 
+
+
 	FRotator MovementRotationTarget = { 0, 0, 0 };
+	FVector TargetDirection = { 0, 0, 0 };
 
 private:
+	bool bSprinting = false;
 	bool bWantsWalk = false;
 	bool bCanAttack = true;
 
